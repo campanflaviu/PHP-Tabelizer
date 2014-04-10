@@ -1,6 +1,9 @@
 <?php
 
+// PHP Tabelizer
+
 // flaviu@cimpan.ro
+// http://cimpan.ro
 // 2014
 
 class Tabelizer{
@@ -17,7 +20,7 @@ class Tabelizer{
 								'td' 	=> array(	'all' => array(),
 													'ind' => array()));
 
-	
+
 
 	public function __construct($con_type = FALSE, $args = FALSE){
 		if($con_type) $this->sql_connect($con_type);
@@ -31,14 +34,6 @@ class Tabelizer{
 	public function get_header(){
 		if($this->con_type == 'wp')
 			$this->t_header = $this->wp_con->get_col("DESC " . $this->t_table, 0);
-	}
-
-	public function get_sql_data($table, $args = FALSE){
-		
-	}
-
-	public function sql_connect($con_type = FALSE){
-		$this->con_type = $con_type;
 	}
 
 	public function get_data(){
@@ -70,7 +65,7 @@ class Tabelizer{
 		}
 		echo '</tr></thead><tbody>';
 		foreach ($this->t_data as $row) {
-			if(count($this->t_header) == count((array)$row)){
+			if(count($this->t_header) == count((array)$row)){ // show only if number of header elements are the same with the row elements
 				echo '<tr>';
 				$i = 0;
 				foreach ($row as $key => $value) {
@@ -84,4 +79,15 @@ class Tabelizer{
 		}
 		echo '</tbody></table>';
 	}
+
+	public function add_column($header, $value){
+		$this->t_header[] = $header;
+		foreach ($this->t_data as $key1 => $val1){
+			$new_value = $value;
+			foreach ($this->t_header as $key2 => $val2)
+				$new_value = str_replace('{'.$key2.'}', $this->t_data[$key1]->$val2, $new_value);
+			$this->t_data[$key1]->$header = $new_value;
+		}
+	}
+
 }
