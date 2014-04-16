@@ -7,31 +7,43 @@
 // 2014
 
 class Tabelizer{
-	private $args 		= FALSE;
-	private $editable	= FALSE;
-	private $con_type	= FALSE;
-	private $wp_con		= FALSE;
-	private $t_table 	= FALSE;
-	private $t_where	= '';
-	private $t_data 	= FALSE;
-	private $t_header 	= FALSE;
-	private $t_query 	= FALSE;
-	private $t_style 	= array('table' => array(), 
-								'tr' 	=> array(), 
-								'th' 	=> array(), 
-								'td' 	=> array(	'all' => array(),
-													'ind' => array()));
+	private $args 			= FALSE;
+	private $editable		= FALSE;
+	private $con_type		= FALSE;
+	private $wp_con			= FALSE;
+	private $table 			= FALSE;
+	private $where			= '';
+	private $data 			= FALSE;
+	private $header 		= FALSE;
+	private $query 			= FALSE;
+
+	private $has_pagination = FALSE;
+	private $pagination		= array('page_no' 	=> 1,
+									'per_page'	=> 10,
+									'total'		=> 0);
+
+	private $style 			= array('table' => array(), 
+										'tr' 	=> array(), 
+										'th' 	=> array(), 
+										'td' 	=> array(	'all' => array(),
+															'ind' => array()));
 
 
 
 	public function __construct($con_type = FALSE, $args = FALSE){
 		$this->args = $args;
 		if($con_type) $this->sql_connect($con_type);
-		if(isset($args['table']))			$this->t_table 	= $args['table'];
-		if(isset($args['wp_con'])) 			$this->wp_con 	= $args['wp_con'];
-		if(isset($args['where']))			$this->t_where 	= $args['where'];
-		if(isset($this->args['editable']))	$this->editable = $this->args['editable'];
-
+		if(isset($args['table']))			$this->table 			= $args['table'];
+		if(isset($args['wp_con'])) 			$this->wp_con 			= $args['wp_con'];
+		if(isset($args['where']))			$this->where 			= $args['where'];
+		if(isset($args['pagination']))		{
+			$this->get_no_of_elements();
+			$this->has_pagination 			= $args['pagination'];
+			$this->pagination['page_no'] 	= (isset($_GET['page_no']) 	? $_GET['page_no'] 	: $this->pagination['page_no']);
+			$this->pagination['per_page'] 	= (isset($_GET['per_page']) ? $_GET['per_page'] : $this->pagination['per_page']);
+			$this->pagination['pages'] 		= ceil($this->pagination['total'] / $this->pagination['per_page']);
+		}
+		if(isset($this->args['editable']))	$this->editable 		= $this->args['editable'];
 		$this->get_header();
 		$this->get_data();
 	}
@@ -42,32 +54,42 @@ class Tabelizer{
 
 	public function get_header(){
 		if(isset($this->args['columns'])){ // custom column names
-			$this->t_header = $this->args['columns'];
+			$this->header = $this->args['columns'];
 			return;	
 		}
 
 		if($this->con_type == 'wp')
-			$this->t_header = $this->wp_con->get_col("DESC " . $this->t_table, 0);
+			$this->header = $this->wp_con->get_col("DESC " . $this->table, 0);
 
 	}
 
 	public function get_data(){
 		$select = isset($this->args['columns']) ? implode(', ', $this->args['columns']) : '*';
-		if($this->con_type == 'wp')
-			$this->t_data = $this->wp_con->get_results('SELECT '.$select.' FROM '.$this->t_table.$this->t_where);
+		if($this->con_type == 'wp'){
+			$limit = '';
+			if($this->has_pagination)
+				$limit = ' LIMIT '.($this->pagination['page_no'] - 1) * $this->pagination['per_page'].', '.$this->pagination['per_page'];
+			$this->data = $this->wp_con->get_results('SELECT '.$select.' FROM '.$this->table.$this->where.$limit);
+		}
+	}
+
+	public function get_no_of_elements(){
+		if($this->con_type == 'wp'){
+			$this->pagination['total'] = current(reset($this->wp_con->get_results('SELECT COUNT(*) FROM '.$this->table)));
+		}
 	}
 
 	public function set_table_styles($args){
-		foreach ($this->t_style as $key1 => $value1)
+		foreach ($this->style as $key1 => $value1)
 			foreach ($args as $key2 => $value2)
 				if($key1 == $key2) 
 					if($key1 != 'td')
-						$this->t_style[$key1][] = $value2;
+						$this->style[$key1][] = $value2;
 					else{
 						if(isset($value2['all']))
-							$this->t_style[$key1]['all'][] = $value2['all'];
+							$this->style[$key1]['all'][] = $value2['all'];
 						if(isset($value2['ind']))
-							$this->t_style[$key1]['ind'][] = $value2['ind'];
+							$this->style[$key1]['ind'][] = $value2['ind'];
 					}
 	}
 
@@ -79,21 +101,21 @@ class Tabelizer{
 
 		$this->before_print();
 
-		$td_styles = $this->t_style['td'];
+		$td_styles = $this->style['td'];
 
-		if(count($this->t_header) <= 0) return;
-		echo '<table border="0" cellspacing="0" cellpadding="0" class="'.implode(' ', $this->t_style['table']).'"><thead><tr>';
-		foreach ($this->t_header as $key => $value) {
-			echo '<th class="'.implode(' ', $this->t_style['th']).'">'.$value.'</th>';
+		if(count($this->header) <= 0) return;
+		echo '<table border="0" cellspacing="0" cellpadding="0" class="'.implode(' ', $this->style['table']).'"><thead><tr>';
+		foreach ($this->header as $key => $value) {
+			echo '<th class="'.implode(' ', $this->style['th']).'">'.$value.'</th>';
 		}
 		echo '</tr></thead><tbody>';
-		foreach ($this->t_data as $row) {
-			if(count($this->t_header) == count((array)$row)){ // show only if number of header elements are the same with the row elements
+		foreach ($this->data as $row) {
+			if(count($this->header) == count((array)$row)){ // show only if number of header elements are the same with the row elements
 				echo '<tr>';
 				$i = 0;
 				foreach ($row as $key => $value) {
-					$all_styles = $this->t_style['td']['all'];
-					$ind_styles = isset($this->t_style['td']['ind'][$i]) ? $this->t_style['td']['ind'][$i] : array();
+					$all_styles = $this->style['td']['all'];
+					$ind_styles = isset($this->style['td']['ind'][$i]) ? $this->style['td']['ind'][$i] : array();
 					echo '<td class="'.implode(' ', array_merge($all_styles, $ind_styles)).' '.'">'.$value.'</td>';
 					$i++;
 				}
@@ -101,11 +123,40 @@ class Tabelizer{
 			}
 		}
 		echo '</tbody></table>';
-
-		$this->after_print();
+		
+		$this->pagination();
+		$this->editable_js();
 	}
 
-	public function after_print(){
+	private function pagination(){
+		if($this->pagination){
+			$url_vars = $_GET;
+				echo '<div class="pagination">';
+			if($this->pagination['page_no'] > 1){
+				$url_vars['page_no'] 	= $this->pagination['page_no'] - 1;
+				$url_vars['per_page'] 	= $this->pagination['per_page'];
+				echo '<a href="?'.http_build_query($url_vars).'"><span class="prev">Prev</span></a>';
+			}
+			for($i = 1; $i <= $this->pagination['pages']; $i++){
+				$url_vars['page_no'] 	= $i;
+				$url_vars['per_page'] 	= $this->pagination['per_page'];
+
+				if($this->pagination['pages'] > 5 && ($i == $this->pagination['pages'] - 2 && $this->pagination['page_no'] + 1 < $this->pagination['pages'] - 2) || ($i == 3 && $this->pagination['page_no'] -1 > 3)) echo '...';
+				if($this->pagination['pages'] > 5 && $i > 2 && $i < $this->pagination['pages'] - 1 && $i > $this->pagination['page_no'] + 1);
+				elseif($this->pagination['pages'] > 5 && $this->pagination['pages']/2 < $this->pagination['page_no'] && $i < $this->pagination['page_no'] -1 && $i > 2);
+				else
+					echo '<a href="?'.http_build_query($url_vars).'"><span class="pag'.(($this->pagination['page_no'] == $i) ? ' active' : '').'">'.$i.'</span></a>';
+			}
+			if($this->pagination['page_no'] < $this->pagination['pages']){
+				$url_vars['page_no'] 	= $this->pagination['page_no'] + 1;
+				$url_vars['per_page'] 	= $this->pagination['per_page'];
+				echo '<a href="?'.http_build_query($url_vars).'"><span class="next">Next</span></a></div><div style="clear:both"></div>';
+			}
+		}
+
+	}
+
+	private function editable_js(){
 		if($this->editable !== FALSE){
 			echo '<script>
 					jQuery(".tabelizer_edit").click(function(){
@@ -144,12 +195,12 @@ class Tabelizer{
 	}
 
 	public function add_column($header, $value){
-		$this->t_header[] = $header;
-		foreach ($this->t_data as $key1 => $val1){
+		$this->header[] = $header;
+		foreach ($this->data as $key1 => $val1){
 			$new_value = $value;
-			foreach ($this->t_header as $key2 => $val2)
-				$new_value = str_replace('{'.$key2.'}', $this->t_data[$key1]->$val2, $new_value);
-			$this->t_data[$key1]->$header = $new_value;
+			foreach ($this->header as $key2 => $val2)
+				$new_value = str_replace('{'.$key2.'}', $this->data[$key1]->$val2, $new_value);
+			$this->data[$key1]->$header = $new_value;
 		}
 	}
 
